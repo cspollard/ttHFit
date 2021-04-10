@@ -1,12 +1,10 @@
 
 """
 python yoda2json.py \
-  sherpa_ttbb_finalscales_decOff_hps8.MUR1_MUF1_MUQ1_PDF260400.yoda \
+  fused.yoda \
   30000 \
-  '/hxswg_ttbjets_stable_v3_25/0_logPT_J1_(25)' \
-  '/hxswg_ttbjets_stable_v3_25/1_logPT_J1_(25)' \
-  '/hxswg_ttbjets_stable_v3_25/2_logPT_J1_(25)' \
-  'MUR2_MUF1_PDF260400'
+  '/MCTTBBDecayed/onelep_eq5j_eq2jb/njl,/MCTTBBDecayed/onelep_eq5j_eq3jb/njl,/MCTTBBDecayed/onelep_eq5j_ge4jb/njl,/MCTTBBDecayed/onelep_ge6j_eq2jb/njl,/MCTTBBDecayed/onelep_ge6j_eq3jb/njl,/MCTTBBDecayed/onelep_ge6j_ge4jb/njl' \
+  'MUR2_MUF1_PDF261000,btagrate,ctagrate,jes'
 """
 
 # TODO
@@ -20,19 +18,9 @@ myargs = argv[1:]
 
 infile = myargs.pop(0)
 lumi = float(myargs.pop(0))
-ttjetsname = myargs.pop(0)
-ttbname = myargs.pop(0)
-ttbbname = myargs.pop(0)
-varnames = myargs
+histnames = myargs.pop(0).split(",")
+varnames = myargs.pop(0).split(",")
 
-
-aos = yoda.read(infile)
-
-def variations(basename, varnames):
-  return \
-    ( aos[basename]
-    , { varname : aos[basename + "[%s]" % varname] for varname in varnames }
-    )
 
 def lmap(f, l): return list(map(f, l))
 
@@ -82,14 +70,27 @@ def joinWith(f, c, d):
   return (n , { k : f(vc[k], vd[k]) for k in z.keys() })
 
 
-def concat(c, d): return joinWith(list.__add__, c, d)
+
+def concat(cs): return reduce(list.__add__, cs)
 
 def toList(h):
   return map(yoda.HistoBin1D.area, h.bins())
 
-ttjets = fmap(toList, variations(ttjetsname, varnames))
-ttb = fmap(toList, variations(ttbname, varnames))
-ttbb = fmap(toList, variations(ttbbname, varnames))
+
+def readHists(d, names):
+  return concat([toList(d[name]) for name in names])
+
+def readHistsWithVars(d, names, varnames):
+  return \
+    ( readHists(d, names)
+    , { varname : readHists(d, [name + "[%s]" % varname for name in names]) for varname in varnames }
+    )
+
+
+
+aos = yoda.read(infile)
+
+histvariations = readHistsWithVars(aos, histnames, varnames)
 
 
 def setMin(c):
@@ -103,7 +104,7 @@ def setKey(k, v, d):
   return d
 
 
-hists = fmap(setMin(1e-5), concat(concat(ttjets, ttb), ttbb))
+hists = fmap(setMin(1e-5), histvariations)
 norm = integral(nom(hists))
 hists = fmap(lambda h: normalize(norm, h), hists)
 normsys = scale(1.1)(nom(hists))
